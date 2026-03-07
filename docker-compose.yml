@@ -1,0 +1,89 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://typing:typing@postgres:5432/typing_trainer
+      - REDIS_URL=redis://redis:6379/0
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    volumes:
+      - ./backend:/app
+
+  analytics-worker:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.worker
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://typing:typing@postgres:5432/typing_trainer
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    volumes:
+      - ./analytics-worker:/app
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: typing
+      POSTGRES_PASSWORD: typing
+      POSTGRES_DB: typing_trainer
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U typing -d typing_trainer"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    depends_on:
+      - zookeeper
+
+volumes:
+  postgres_data:
+  redis_data:
