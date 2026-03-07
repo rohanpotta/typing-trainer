@@ -44,3 +44,6 @@ htmlcov/
 # Database
 *.db
 *.sqlite3
+
+# Temp files
+README_temp.md
