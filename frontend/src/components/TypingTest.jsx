@@ -14,6 +14,7 @@ export default function TypingTest({ exercise, onComplete }) {
   const [keystrokes, setKeystrokes] = useState([]);
   const [currentWpm, setCurrentWpm] = useState(0);
   const [currentAccuracy, setCurrentAccuracy] = useState(100);
+  const [elapsed, setElapsed] = useState(0);
   const inputRef = useRef(null);
   const keystrokeRef = useRef([]);
 
@@ -26,15 +27,28 @@ export default function TypingTest({ exercise, onComplete }) {
     focusInput();
   }, [focusInput]);
 
+  // Timer — ticks every second independently
+  useEffect(() => {
+    if (!startTime || isFinished) return;
+    const interval = setInterval(() => {
+      setElapsed(Math.round((Date.now() - startTime) / 1000));
+    }, 200);
+    return () => clearInterval(interval);
+  }, [startTime, isFinished]);
+
   // Live stats update
   useEffect(() => {
     if (!startTime || input.length === 0) return;
-    const elapsed = (Date.now() - startTime) / 1000 / 60; // minutes
-    const wordsTyped = input.length / 5; // standard: 5 chars = 1 word
-    setCurrentWpm(Math.round(wordsTyped / elapsed) || 0);
+    const elapsedMin = (Date.now() - startTime) / 1000 / 60; // minutes
+    if (elapsedMin > 0) {
+      const wordsTyped = input.length / 5; // standard: 5 chars = 1 word
+      setCurrentWpm(Math.round(wordsTyped / elapsedMin) || 0);
+    }
 
     const correct = input.split('').filter((c, i) => c === text[i]).length;
-    setCurrentAccuracy(Math.round((correct / input.length) * 100) || 100);
+    if (input.length >= 3) {
+      setCurrentAccuracy(Math.round((correct / input.length) * 100));
+    }
   }, [input, startTime, text]);
 
   const handleKeyDown = (e) => {
@@ -97,6 +111,18 @@ export default function TypingTest({ exercise, onComplete }) {
     }
   };
 
+  const handleRestart = () => {
+    setInput('');
+    setStartTime(null);
+    setIsFinished(false);
+    setKeystrokes([]);
+    setCurrentWpm(0);
+    setCurrentAccuracy(100);
+    setElapsed(0);
+    keystrokeRef.current = [];
+    focusInput();
+  };
+
   const renderText = () => {
     return text.split('').map((char, i) => {
       let className = 'char ';
@@ -127,9 +153,7 @@ export default function TypingTest({ exercise, onComplete }) {
           <div className="stat-label">Accuracy</div>
         </div>
         <div className="stat-item">
-          <div className="stat-value">
-            {startTime ? Math.round((Date.now() - startTime) / 1000) : 0}s
-          </div>
+          <div className="stat-value">{elapsed}s</div>
           <div className="stat-label">Time</div>
         </div>
       </div>
@@ -152,6 +176,12 @@ export default function TypingTest({ exercise, onComplete }) {
 
       {!startTime && (
         <p className="typing-prompt">Click the text above and start typing...</p>
+      )}
+
+      {startTime && !isFinished && (
+        <button className="typing-restart" onClick={handleRestart}>
+          ↺ Restart
+        </button>
       )}
     </div>
   );
